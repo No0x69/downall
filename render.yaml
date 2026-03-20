@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: video-downloader-api
+    env: docker
+    region: frankfurt
+    plan: free
+    rootDir: backend
+    healthCheckPath: /health

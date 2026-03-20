@@ -1,0 +1,25 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Python / Backend
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Misc
+.DS_Store
+*.log
+*.pid
+
+# Downloaded files
+backend/*.mp4
+backend/*.mp3
+backend/*.webm
+backend/*.m4a
+
+# Node tarball left in root
+node-v*-darwin-arm64*

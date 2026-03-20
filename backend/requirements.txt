@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+yt-dlp
+cachetools
+python-dotenv
+python-multipart
+imageio-ffmpeg
