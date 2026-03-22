@@ -28,6 +28,9 @@ export default function FormatCard({ format, selected, onSelect, best }: Props) 
       <div className="format-card__content">
         <span className="format-card__label">{label}</span>
         {best && <span className="format-card__badge">Best</span>}
+        {isVideo && (format.vcodec?.includes("h264") || format.vcodec?.includes("avc1")) && (
+          <span className="format-card__badge" style={{ background: "#3b82f6" }}>Compatible</span>
+        )}
         <div className="format-card__details">
           <span>{format.ext.toUpperCase()}</span>
           <span>•</span>

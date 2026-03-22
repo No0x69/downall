@@ -8,13 +8,17 @@ import Image from "next/image";
 import FormatCard from "./FormatCard";
 
 export default function DownloadModal() {
-  const { modalOpen, closeModal, mediaInfo, inputUrl } = useStore();
+  const { modalOpen, closeModal, mediaInfo, inputUrl, error } = useStore();
   const [activeTab, setActiveTab] = useState<"video" | "audio">("video");
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadStarted, setDownloadStarted] = useState(false);
 
   useEffect(() => {
     if (modalOpen) {
       document.body.style.overflow = "hidden";
+      setDownloadStarted(false);
+      setDownloading(false);
     } else {
       document.body.style.overflow = "auto";
       setSelectedFormat(null);
@@ -38,32 +42,47 @@ export default function DownloadModal() {
   if (!modalOpen) return null;
 
   const handleDownload = () => {
-    if (!selectedFormat || !mediaInfo) return;
+    if (!selectedFormat || !mediaInfo || downloading) return;
 
-    // Add to history
-    let formatLabel = "";
-    if (activeTab === "video") {
-      const fmt = mediaInfo.video_formats.find((f) => f.format_id === selectedFormat);
-      formatLabel = fmt ? `Video • ${fmt.label}` : "Video";
-    } else {
-      const fmt = mediaInfo.audio_formats.find((f) => f.format_id === selectedFormat);
-      formatLabel = fmt ? `Audio • ${fmt.label}` : "Audio";
+    setDownloading(true);
+
+    try {
+      // Add to history
+      let formatLabel = "";
+      if (activeTab === "video") {
+        const fmt = mediaInfo.video_formats.find((f) => f.format_id === selectedFormat);
+        formatLabel = fmt ? `Video • ${fmt.label}` : "Video";
+      } else {
+        const fmt = mediaInfo.audio_formats.find((f) => f.format_id === selectedFormat);
+        formatLabel = fmt ? `Audio • ${fmt.label}` : "Audio";
+      }
+
+      addHistory({
+        url: inputUrl,
+        platform: mediaInfo.platform,
+        title: mediaInfo.title,
+        format: formatLabel,
+      });
+
+      // Trigger download using the proxy route
+      const downloadUrl = getDownloadUrl(inputUrl, selectedFormat, activeTab);
+      
+      // Assign to location. Note: since merging takes time, 
+      // the browser might seem 'stuck' until headers arrive.
+      window.location.assign(downloadUrl);
+
+      // Show feedback for a few seconds then close
+      setDownloadStarted(true);
+      setTimeout(() => {
+        if (modalOpen) closeModal();
+        setDownloading(false);
+      }, 4000);
+    } catch (err) {
+      console.error("Download preparation failed:", err);
+      // Don't leave user in loading state if something crashes
+      setDownloading(false);
+      setDownloadStarted(false);
     }
-
-    addHistory({
-      url: inputUrl,
-      platform: mediaInfo.platform,
-      title: mediaInfo.title,
-      format: formatLabel,
-    });
-
-    // Trigger download using the proxy route
-    const downloadUrl = getDownloadUrl(inputUrl, selectedFormat);
-    
-    // Assign to location to invoke browser's native file download handler reliably
-    window.location.assign(downloadUrl);
-
-    closeModal();
   };
 
   return (
@@ -137,15 +156,33 @@ export default function DownloadModal() {
             </div>
 
             <div className="modal-footer">
+              {downloadStarted && (
+                <p className="download-status">
+                  Preparing your file... The download will start automatically in a moment.
+                </p>
+              )}
               <button
-                className="btn-download"
+                className={`btn-download ${downloading ? "btn-download--loading" : ""}`}
                 onClick={handleDownload}
-                disabled={!selectedFormat}
+                disabled={!selectedFormat || downloading}
               >
-                Download Now
+                {downloading ? (
+                  <>
+                    <span className="spinner-small" /> Processing...
+                  </>
+                ) : (
+                  "Download Now"
+                )}
               </button>
             </div>
           </>
+        ) : error ? (
+          <div className="modal-loading">
+            <p style={{ color: "#ef4444", marginBottom: "1rem" }}>⚠️ {error}</p>
+            <button className="btn-download" onClick={closeModal} style={{ width: "auto", padding: "0.5rem 1.5rem" }}>
+              Close
+            </button>
+          </div>
         ) : (
           <div className="modal-loading">
             <div className="spinner-large" />

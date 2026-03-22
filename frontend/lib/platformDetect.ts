@@ -13,10 +13,16 @@ const PATTERNS: Record<Platform, RegExp[]> = {
     /(?:https?:\/\/)?(?:www\.)?facebook\.com\/.+\/videos\//i,
     /(?:https?:\/\/)?(?:www\.)?fb\.watch\//i,
     /(?:https?:\/\/)?(?:www\.)?facebook\.com\/watch/i,
+    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/reel\//i,
+    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/share\/v\//i,
+    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/share\/r\//i,
+    /(?:https?:\/\/)?m\.facebook\.com\//i,
   ],
   tiktok: [
     /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[^/]+\/video\//i,
     /(?:https?:\/\/)?vm\.tiktok\.com\//i,
+    /(?:https?:\/\/)?vt\.tiktok\.com\//i,
+    /(?:https?:\/\/)?m\.tiktok\.com\//i,
   ],
 };
 

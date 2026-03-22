@@ -14,10 +14,16 @@ PATTERNS = {
         r"(?:https?://)?(?:www\.)?facebook\.com/.+/videos/",
         r"(?:https?://)?(?:www\.)?fb\.watch/",
         r"(?:https?://)?(?:www\.)?facebook\.com/watch",
+        r"(?:https?://)?(?:www\.)?facebook\.com/reel/",
+        r"(?:https?://)?(?:www\.)?facebook\.com/share/v/",
+        r"(?:https?://)?(?:www\.)?facebook\.com/share/r/",
+        r"(?:https?://)?m\.facebook\.com/",
     ],
     "tiktok": [
         r"(?:https?://)?(?:www\.)?tiktok\.com/@[^/]+/video/",
         r"(?:https?://)?vm\.tiktok\.com/",
+        r"(?:https?://)?vt\.tiktok\.com/",
+        r"(?:https?://)?m\.tiktok\.com/",
     ],
 }
 

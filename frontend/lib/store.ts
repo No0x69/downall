@@ -10,6 +10,8 @@ export interface VideoFormat {
   has_audio: boolean;
   filesize: number | null;
   tbr: number | null;
+  vcodec?: string;
+  acodec?: string;
 }
 
 export interface AudioFormat {

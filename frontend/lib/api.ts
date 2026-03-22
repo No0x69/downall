@@ -14,6 +14,6 @@ export async function fetchMediaInfo(url: string): Promise<MediaInfo> {
   return res.json();
 }
 
-export function getDownloadUrl(url: string, formatId: string): string {
-  return `${API_BASE}/download?url=${encodeURIComponent(url)}&format_id=${encodeURIComponent(formatId)}`;
+export function getDownloadUrl(url: string, formatId: string, type: "video" | "audio" = "video"): string {
+  return `${API_BASE}/download?url=${encodeURIComponent(url)}&format_id=${encodeURIComponent(formatId)}&type=${type}`;
 }

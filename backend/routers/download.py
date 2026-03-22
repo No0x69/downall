@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 @router.get("/download")
-async def download_media(url: str, format_id: str, request: Request):
+async def download_media(url: str, format_id: str, request: Request, type: str = "video"):
     client_ip = request.client.host if request.client else "unknown"
 
     if is_rate_limited(client_ip):
@@ -21,37 +21,35 @@ async def download_media(url: str, format_id: str, request: Request):
     if not is_valid_url(url):
         raise HTTPException(status_code=400, detail="Invalid URL.")
 
-    # Sanitize format_id — allow alphanumeric, +, /, -, _, [, ], =, ,
+    # Sanitize format_id
     import re
     if not re.match(r"^[\w\+\-\/\.\[\]\=]+$", format_id):
         raise HTTPException(status_code=400, detail="Invalid format ID.")
 
-    filename_holder = [None]
-    
-    def stream_generator():
-        try:
-            for chunk, fname in download_stream(url, format_id):
-                if filename_holder[0] is None:
-                    filename_holder[0] = fname
-                yield chunk
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-
-    # Determine content type based on format
-    is_audio = "audio" in format_id or format_id == "bestaudio/best"
+    # ALWAYS force stable extensions to ignore cached frontend requests
+    is_audio = type == "audio"
+    ext = "mp3" if is_audio else "mp4"
     media_type = "audio/mpeg" if is_audio else "video/mp4"
 
-    safe_filename = "download.mp4"
-    if is_audio:
-        safe_filename = "download.mp3"
+    try:
+        # Get generator, size, and filename from the helper
+        gen, size, fname = download_stream(url, format_id, download_type=type)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        import traceback
+        print(f"CRITICAL DOWNLOAD ERROR: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="An error occurred during download preparation.")
 
     headers = {
-        "Content-Disposition": f'attachment; filename="{safe_filename}"',
-        "Access-Control-Expose-Headers": "Content-Disposition",
+        "Content-Disposition": f'attachment; filename="download.{ext}"',
+        "Content-Length": str(size),
+        "Access-Control-Expose-Headers": "Content-Disposition, Content-Length",
     }
 
     return StreamingResponse(
-        stream_generator(),
+        gen,
         media_type=media_type,
         headers=headers,
     )

@@ -10,14 +10,18 @@ import imageio_ffmpeg
 
 def _run_ytdlp_json(url: str) -> dict:
     """Extract info dict from yt-dlp (no download)."""
+    # Using specific clients help bypass current YouTube blocks.
+    # 'android_vr' and 'web_embedded' currently expose the most DASH formats.
+    cmd = [
+        "yt-dlp",
+        "--dump-json",
+        "--no-playlist",
+        "--no-warnings",
+        "--extractor-args", "youtube:player-client=android_vr,web_embedded",
+        url,
+    ]
     result = subprocess.run(
-        [
-            "yt-dlp",
-            "--dump-json",
-            "--no-playlist",
-            "--no-warnings",
-            url,
-        ],
+        cmd,
         capture_output=True,
         text=True,
         timeout=60,
@@ -48,6 +52,8 @@ def _format_duration(seconds) -> str:
 
 def get_info(url: str) -> dict:
     """Return structured metadata + format list for a URL."""
+    # We add more robust extractor args to try and bypass throttling/SABR issues
+    # Using 'tv' and 'android' clients often helps without requiring PO tokens
     info = _run_ytdlp_json(url)
 
     title = info.get("title", "Unknown Title")
@@ -58,10 +64,9 @@ def get_info(url: str) -> dict:
 
     raw_formats = info.get("formats", [])
 
-    VIDEO_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
-    seen_heights = set()
     video_formats = []
     audio_formats = []
+    seen_heights = set()
 
     for f in raw_formats:
         fmt_id = f.get("format_id", "")
@@ -87,32 +92,51 @@ def get_info(url: str) -> dict:
                 "tbr": tbr,
             })
 
-        # Video formats (may have audio merged or be video-only)
-        elif vcodec != "none" and height and height in VIDEO_HEIGHTS and height not in seen_heights:
-            has_audio = acodec != "none"
+        # Video formats
+        elif vcodec != "none" and height:
+            if height in seen_heights:
+                continue
+                
+            has_audio = acodec != "none" and acodec != "none"
             final_fmt = fmt_id
             
-            # If video has no audio (common for 1080p+), merge it with best audio!
+            # If video has no audio (DASH/HLS), merge it with best audio!
             if not has_audio:
                 final_fmt = f"{fmt_id}+bestaudio[ext=m4a]/bestaudio/best"
                 has_audio = True
 
             label = f"{height}p"
             if height >= 2160:
-                label = "4K 2160p"
+                label = f"4K {height}p"
             elif height >= 1440:
-                label = "2K 1440p"
+                label = f"2K {height}p"
             elif height >= 1080:
-                label = "HD 1080p"
+                label = f"1080p HD"
+            elif height >= 720:
+                label = f"720p"
+
+            # Determine codec labels for user visibility
+            codec_label = ""
+            if "avc1" in vcodec or "h264" in vcodec:
+                codec_label = " (H.264)" # Highly compatible with Mac/iOS
+            elif "vp09" in vcodec or "vp9" in vcodec:
+                codec_label = " (VP9)"
+            elif "av01" in vcodec or "av1" in vcodec:
+                codec_label = " (AV1)"
+            
+            # Update the label with more info
+            full_label = f"{label}{codec_label}"
 
             video_formats.append({
                 "format_id": final_fmt,
                 "type": "video",
-                "label": label,
+                "label": full_label,
                 "height": height,
-                "ext": "mp4", # Merged files usually end up as mp4
-                "has_audio": has_audio,
+                "ext": ext if ext != "none" else "mp4",
                 "filesize": filesize,
+                "has_audio": has_audio,
+                "vcodec": vcodec,
+                "acodec": acodec,
                 "tbr": tbr,
             })
             seen_heights.add(height)
@@ -150,48 +174,64 @@ def get_info(url: str) -> dict:
     }
 
 
-def download_stream(url: str, format_id: str):
-    """Generator that yields file bytes for the given format."""
-    tmpdir = tempfile.mkdtemp()
-    out_template = os.path.join(tmpdir, "%(title)s.%(ext)s")
+def download_stream(url: str, format_id: str, download_type: str = "video"):
+    """
+    Downloads a video from a URL in the specified format and return a generator, size, and filename.
+    """
+    temp_dir = tempfile.mkdtemp()
+    temp_dir_path = Path(temp_dir)
+    out_template = str(temp_dir_path / "%(title)s.%(ext)s")
+    
+    # Build yt-dlp command
+    cmd = [
+        "yt-dlp",
+        "--newline",
+        "--no-playlist",
+        "--socket-timeout", "30",
+        "--extractor-args", "youtube:player-client=android_vr,web_embedded",
+        "-f", format_id,
+        "--merge-output-format", "mp4",
+        "--ffmpeg-location", imageio_ffmpeg.get_ffmpeg_exe(),
+        "-o", out_template,
+    ]
+
+    if download_type == "audio":
+        cmd += ["--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"]
+
+    cmd.append(url)
+    
     try:
-        # Build yt-dlp args
-        if format_id in ("bestaudio/best",):
-            fmt_arg = format_id
-        else:
-            fmt_arg = format_id
-
-        # For audio formats, post-process to mp3
-        cmd = [
-            "yt-dlp",
-            "--ffmpeg-location", imageio_ffmpeg.get_ffmpeg_exe(),
-            "-f", fmt_arg,
-            "--merge-output-format", "mp4",
-            "--no-playlist",
-            "-o", out_template,
-        ]
-
-        # if it's audio-only request, convert to mp3
-        is_audio = format_id.startswith("bestaudio") or "audio" in format_id
-        if is_audio:
-            cmd += ["--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"]
-
-        cmd.append(url)
-
-        result = subprocess.run(cmd, capture_output=True, timeout=300)
+        print(f"Executing: {' '.join(cmd)}")
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=600)
+        
         if result.returncode != 0:
-            raise ValueError(f"Download failed: {result.stderr.decode()[:200]}")
+            stderr = result.stderr.decode(errors="replace")
+            print(f"Error: {stderr}")
+            shutil.rmtree(temp_dir)
+            raise ValueError(f"Download failed: {stderr[:500]}")
 
         # Find the output file
-        files = list(Path(tmpdir).iterdir())
+        files = list(temp_dir_path.iterdir())
         if not files:
+            shutil.rmtree(temp_dir)
             raise ValueError("No output file was created.")
 
-        out_file = files[0]
+        # Pick largest file
+        out_file = max(files, key=lambda f: f.stat().st_size)
         filename = out_file.name
+        filesize = out_file.stat().st_size
 
-        with open(out_file, "rb") as f:
-            while chunk := f.read(1024 * 64):
-                yield chunk, filename
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        def generator():
+            try:
+                with open(out_file, "rb") as f:
+                    while chunk := f.read(1024 * 64):
+                        yield chunk
+            finally:
+                # Cleanup temp directory when generator is exhausted OR closed
+                shutil.rmtree(temp_dir)
+
+        return generator(), filesize, filename
+    except Exception as e:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        raise e
