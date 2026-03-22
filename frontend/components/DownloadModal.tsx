@@ -98,7 +98,7 @@ export default function DownloadModal() {
               {mediaInfo.thumbnail && (
                 <div className="modal-thumb">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={mediaInfo.thumbnail} alt="Thumbnail" />
+                  <img src={mediaInfo.thumbnail} alt="Thumbnail" referrerPolicy="no-referrer" />
                   <span className="modal-duration">{mediaInfo.duration}</span>
                 </div>
               )}
